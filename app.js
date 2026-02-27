@@ -6,12 +6,9 @@ const cors = require('cors');
 const app = express();
 
 app.use(express.json());
-app.use(cors({ 
-  origin: [
-    'http://localhost:4200',
-    'https://10815ce5162d.ngrok-free.app'
-  ]
-}));
+
+app.use(cors()); //allow all origins
+
 app.use(require('./routes/userRoutes'));
 app.use(require('./routes/testRoutes'));
 app.use(require('./routes/pictureRoutes'));
