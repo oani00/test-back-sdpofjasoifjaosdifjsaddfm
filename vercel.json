@@ -1,13 +1,13 @@
 {
-  "headers": [
-    {
-      "source": "/(.*)", 
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "https://test-front-0asu98fu0asd8fun0a9sd8f-1tpzblcjx-oanis-projects.vercel.app" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,DELETE,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Requested-With, Accept" },
-        { "key": "Access-Control-Allow-Credentials", "value": "true" } 
-      ]
-    }
-  ]
+"headers": [
+  {
+    "source": "/(.*)",
+    "headers": [
+      { "key": "Access-Control-Allow-Origin", "value": "https://a" }, 
+      { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,DELETE,OPTIONS" },
+      { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Requested-With, Accept" },
+      { "key": "Access-Control-Allow-Credentials", "value": "true" } 
+    ]
+  }
+]
 }
