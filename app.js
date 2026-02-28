@@ -5,18 +5,9 @@ const cors = require('cors');
 
 const app = express();
 
-// --- EXPLICIT CORS Configuration in app.js ---
-app.use(cors({
-origin: 'https://a', // <--- Changed to dummy origin
-methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-credentials: true // Keep this consistent with your app's actual needs, or set to false/omit if not using
-}));
-console.log("CORS middleware initialized with DUMMY origin: https://a"); // Add specific log
-
-// --- End CORS Configuration ---
-
+app.use(cors()); //allow all origins
 app.use(express.json());
+
 app.use(require('./routes/userRoutes'));
 app.use(require('./routes/testRoutes'));
 app.use(require('./routes/pictureRoutes'));
