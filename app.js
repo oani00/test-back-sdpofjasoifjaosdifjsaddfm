@@ -7,9 +7,9 @@ const app = express();
 
 app.use(express.json());
 
-app.use(cors({
-origin: '*'
-}));
+// app.use(cors({
+// origin: '*'
+// }));
 
 app.use(require('./routes/userRoutes'));
 app.use(require('./routes/testRoutes'));
