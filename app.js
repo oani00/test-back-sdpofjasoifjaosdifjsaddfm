@@ -5,7 +5,15 @@ const cors = require('cors');
 
 const app = express();
 
-app.use(cors()); //allow all origins
+// app.use(cors()); //allow all origins
+
+app.use(cors({ 
+  origin: [
+    'http://localhost:4200',
+    'https://test-back-sdpofjasoifjaosdifjsaddfm-i64of6rw8-oanis-projects.vercel.app/'
+  ]
+}));
+
 app.use(express.json());
 
 app.use(require('./routes/userRoutes'));
