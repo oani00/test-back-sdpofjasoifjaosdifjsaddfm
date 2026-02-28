@@ -7,12 +7,13 @@ const app = express();
 
 // --- Explicit CORS Configuration ---
 app.use(cors({
-  origin: '*', // Explicitly allow all origins
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow these HTTP methods
-  allowedHeaders: ['Content-Type', 'Authorization'], // Allow these headers from the client
-  // If you send cookies/credentials from your frontend, uncomment this:
-  // credentials: true,
-  optionsSuccessStatus: 204 // For preflight OPTIONS requests, return 204 No Content
+  origin: [
+    'http://localhost:4200', // For local development
+    'https://test-front-0asu98fu0asd8fun0a9sd8f-1tpzblcjx-oanis-projects.vercel.app' // For your deployed Vercel frontend
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  credentials: true // Adjust as per your frontend needs
 }));
 console.log("CORS APLICADO com configuração explícita");
 // --- End CORS Configuration ---
