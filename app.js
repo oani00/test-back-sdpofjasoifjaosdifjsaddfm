@@ -5,12 +5,19 @@ const cors = require('cors');
 
 const app = express();
 
+// --- Explicit CORS Configuration ---
+app.use(cors({
+  origin: '*', // Explicitly allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow these HTTP methods
+  allowedHeaders: ['Content-Type', 'Authorization'], // Allow these headers from the client
+  // If you send cookies/credentials from your frontend, uncomment this:
+  // credentials: true,
+  optionsSuccessStatus: 204 // For preflight OPTIONS requests, return 204 No Content
+}));
+console.log("CORS APLICADO com configuração explícita");
+// --- End CORS Configuration ---
+
 app.use(express.json());
-
-app.use(cors()); //allow all origins
-
-console.log("CORS APLICADO");
-
 app.use(require('./routes/userRoutes'));
 app.use(require('./routes/testRoutes'));
 app.use(require('./routes/pictureRoutes'));
