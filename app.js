@@ -5,17 +5,15 @@ const cors = require('cors');
 
 const app = express();
 
-// --- Explicit CORS Configuration ---
+// --- EXPLICIT CORS Configuration in app.js ---
 app.use(cors({
-  origin: '*', // Explicitly allow all origins
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow these HTTP methods
-  allowedHeaders: ['Content-Type', 'Authorization'], // Allow these headers from the client
-  // If you send cookies/credentials from your frontend, uncomment this:
-  // credentials: true,
-  optionsSuccessStatus: 204 // For preflight OPTIONS requests, return 204 No Content
+// Use the exact URL of your Vercel frontend
+origin: 'https://test-front-0asu98fu0asd8fun0a9sd8f-1tpzblcjx-oanis-projects.vercel.app',
+methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Always include OPTIONS for preflight requests
+allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'], // Add any custom headers your frontend might send
+credentials: true // Set this to 'true' if your frontend uses 'withCredentials: true' or sends cookies/auth headers. If not, set to 'false' or omit.
 }));
-console.log("CORS APLICADO com configuração explícita");
-// --- End CORS Configuration ---
+console.log("CORS middleware initialized with explicit Vercel frontend origin.");
 
 app.use(express.json());
 app.use(require('./routes/userRoutes'));
