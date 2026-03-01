@@ -8,5 +8,5 @@
  * @returns {Object} response
  */
 exports.test = (req, res) => {
-  res.json({ response: "TEXTO TESTE" });
+  res.json({ response: "TESTE A 03 01 18 36" });
 };
