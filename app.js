@@ -5,33 +5,7 @@ const cors = require('cors');
 
 const app = express();
 
-// app.use(cors({
-//   origin: 'https://test-front-0asu98fu0asd8fun0a9sd8f.vercel.app',
-//   credentials: true,
-//   methods: ['GET', 'OPTIONS', 'PATCH', 'DELETE', 'POST', 'PUT'],
-//   allowedHeaders: ['X-CSRF-Token', 'X-Requested-With', 'Accept', 'Accept-Version', 'Content-Length', 'Content-MD5', 'Content-Type', 'Date', 'X-Api-Version']
-// }));
-
-// First: handle preflight globally and immediately
-app.options('*', cors());  // This uses the cors package to reply to OPTIONS with proper headers
-
-// Or, if you want full control / to match your config exactly:
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://test-front-0asu98fu0asd8fun0a9sd8f.vercel.app');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.header('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
-  res.sendStatus(200);  // or res.status(204).end();
-});
-
-// Then your normal cors for the actual requests
-app.use(cors({
-  origin: 'https://test-front-0asu98fu0asd8fun0a9sd8f.vercel.app',
-  credentials: true,
-  methods: ['GET', 'OPTIONS', 'PATCH', 'DELETE', 'POST', 'PUT'],
-  allowedHeaders: ['X-CSRF-Token', 'X-Requested-With', 'Accept', 'Accept-Version', 'Content-Length', 'Content-MD5', 'Content-Type', 'Date', 'X-Api-Version']
-}));
-
+app.use(cors()); //allow all origins
 
 app.use(express.json());
 app.use(require('./routes/userRoutes'));
