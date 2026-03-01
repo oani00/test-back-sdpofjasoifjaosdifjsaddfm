@@ -7,6 +7,15 @@ const app = express();
 
 app.use(cors()); //allow all origins
 
+// Force specific CORS headers on every response
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.header('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  next();
+});
+
 app.use(express.json());
 app.use(require('./routes/userRoutes'));
 app.use(require('./routes/testRoutes'));
