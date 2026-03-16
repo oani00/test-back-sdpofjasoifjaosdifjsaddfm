@@ -102,8 +102,9 @@ Sistema de logging para rastrear operações importantes do sistema.
 ## Funcionalidades Principais
 
 ### Gerenciamento de Usuários
-- **Cadastro**: Criação de conta com nome, email e senha
+- **Cadastro**: Criação de conta com nome, email, senha, telefone, CPF e data de nascimento
 - **Login**: Autenticação JWT retornando token e dados do usuário
+- **Recuperação de Senha**: Troca de senha via validação de CPF, telefone e data de nascimento (mock)
 - **Listagem**: Visualização de todos os usuários (admin)
 - **Exclusão**: Remoção de usuários por ID
 - **Controle de Acesso**: Alteração de tipo (user ↔ admin) por administradores
@@ -141,6 +142,7 @@ http://localhost:3000
 - `POST /SignUp/CreateUser` - Cria novo usuário
 - `DELETE /SignUp/DeleteUserById/:id` - Exclui usuário
 - `POST /SignUp/login/:userId` - Login (userId ignorado na lógica)
+- `POST /SignUp/ResetPassword` - Recuperação de senha (valida CPF, telefone e data de nascimento)
 - `PUT /SignUp/ChangeUserType/:id` - Altera tipo do usuário (admin only)
 
 #### Inscrições em Passeios
@@ -163,6 +165,71 @@ http://localhost:3000
 
 #### Teste
 - `GET /test` - Health check da aplicação
+
+## Documentação das Rotas
+
+### userRoutes.js
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/SignUp/GetAllUsers` | Lista todos os usuários |
+| GET | `/SignUp/GetUserById/:id` | Busca usuário por ID |
+| POST | `/SignUp/CreateUser` | Cria novo usuário |
+| DELETE | `/SignUp/DeleteUserById/:id` | Exclui usuário por ID |
+| POST | `/SignUp/login/:userId` | Login (retorna JWT e dados do usuário; `userId` ignorado) |
+| POST | `/SignUp/ResetPassword` | Recuperação de senha |
+| PUT | `/SignUp/ChangeUserType/:id` | Altera tipo do usuário (admin only) |
+| POST | `/users/:id/picture` | Upload de foto de perfil (multipart/form-data, campo `picture`) |
+| POST | `/users/:userId/subscribe/:excursionId` | Inscreve usuário em passeio |
+| POST | `/users/:userId/unsubscribe/:excursionId` | Cancela inscrição em passeio |
+
+#### POST /SignUp/CreateUser
+**Body:** `{ name, email, password, phone, birthDate, cpf }`  
+CPF e telefone são normalizados (apenas dígitos). Senha é hashada com bcrypt (salt 12).
+
+#### POST /SignUp/login/:userId
+**Body:** `{ email, password }`  
+Retorna `{ message, token, user }` com `user` contendo `id`, `name`, `email`, `type`, `picture`.
+
+#### POST /SignUp/ResetPassword
+**Body:** `{ cpf, phone, birthDate, newPassword }`  
+- Busca usuário por CPF normalizado  
+- Valida se telefone e data de nascimento conferem  
+- Sobrescreve senha com hash bcrypt (mesmo processo do cadastro)  
+- 401 se dados não conferirem; 200 com `{ message: 'Senha alterada com sucesso!' }`
+
+#### PUT /SignUp/ChangeUserType/:id
+**Body:** `{ type, requestingUserEmail, requestingUserPassword }`  
+Requer autenticação do admin solicitante.
+
+### excursionRoutes.js
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/excursions` | Lista todos os passeios |
+| GET | `/excursions/:id` | Busca passeio por ID |
+| GET | `/excursions/:id/users` | Lista usuários inscritos no passeio |
+| POST | `/excursions` | Cria novo passeio (multipart, campo `file`) |
+| PUT | `/excursions/:id` | Atualiza passeio (multipart, campo `file`) |
+| DELETE | `/excursions/:id` | Exclui passeio |
+
+### pictureRoutes.js
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/pictures/:id` | Retorna imagem por ID (binário + content-type) |
+
+### logRoutes.js
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/logs` | Lista logs do sistema |
+
+### testRoutes.js
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/test` | Health check da aplicação |
 
 ## Configuração e Ambiente
 
@@ -197,18 +264,25 @@ npm start  # Usa nodemon em desenvolvimento
 3. Usuário faz login via `POST /SignUp/login/:userId`
 4. Sistema retorna JWT token para sessões futuras
 
-### 2. Gerenciamento de Passeios (Admin)
+### 2. Recuperação de Senha
+1. Usuário acessa a página de recuperação e informa CPF, telefone, data de nascimento e nova senha
+2. Frontend envia `POST /SignUp/ResetPassword` com os dados
+3. Backend busca usuário por CPF, valida telefone e data de nascimento
+4. Se os dados conferirem, a senha é sobrescrita com hash bcrypt (mesmo processo do cadastro)
+5. Usuário pode fazer login com a nova senha
+
+### 3. Gerenciamento de Passeios (Admin)
 1. Admin cria passeio via `POST /excursions` (com imagens incluídas)
 2. Imagens são criadas diretamente no processo de criação/atualização do passeio
 3. Passeios ficam disponíveis para inscrição
 
-### 3. Inscrição em Passeios (Usuário)
+### 4. Inscrição em Passeios (Usuário)
 1. Usuário visualiza passeios via `GET /excursions`
 2. Usuário se inscreve via `POST /users/:userId/subscribe/:excursionId`
 3. Sistema atualiza ambas as entidades (User e Excursion)
 4. Usuário pode cancelar inscrição similarmente
 
-### 4. Controle Administrativo
+### 5. Controle Administrativo
 1. Admin pode alterar tipos de usuário
 2. Admin pode visualizar logs de auditoria
 3. Sistema registra todas as operações importantes

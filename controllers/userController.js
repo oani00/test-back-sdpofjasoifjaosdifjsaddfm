@@ -47,45 +47,69 @@ exports.getUserById = async (req, res) => {
  *
  * Workflow:
  * 1. Validates that all required fields are present.
- * 2. Checks if the provided email is already registered.
+ * 2. Checks if the provided email or CPF is already registered.
  * 3. Hashes the password using bcrypt for security.
  * 4. Creates and saves the new user in the database.
  * 5. Logs the creation event and returns a success message.
  *
  * Responses:
  * - 201: User created successfully.
- * - 422: Missing required fields or email already registered.
+ * - 422: Missing required fields, email already registered, or CPF already registered.
  * - 500: Server error during user creation.
  *
  * Example request body:
  * {
  *   "name": "João Silva",
  *   "email": "joao@email.com",
- *   "password": "minhasenha123"
+ *   "password": "minhasenha123",
+ *   "phone": "11999999999",
+ *   "birthDate": "1990-01-01",
+ *   "cpf": "12345678901"
  * }
  */
 exports.createUser = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, phone, birthDate, cpf } = req.body;
   // Basic validation
-  if (!name || !email || !password) {
-    return res.status(422).json({ message: 'Nome, email e senha são obrigatórios.' });
+  if (!name || !email || !password || !phone || !birthDate || !cpf) {
+    return res.status(422).json({ message: 'Todos os campos são obrigatórios.' });
   }
+
+  // Normalization (Defense in depth)
+  const normalizedCpf = cpf.replace(/\D/g, '');
+  const normalizedPhone = phone.replace(/\D/g, '');
+
+  if (normalizedCpf.length !== 11) {
+    return res.status(422).json({ message: 'CPF deve conter 11 dígitos.' });
+  }
+
   try {
-    const userExists = await User.findOne({ email });
-    if (userExists) {
+    // Check if email already exists
+    const emailExists = await User.findOne({ email });
+    if (emailExists) {
       logWarning(`Attempt to create user with existing email: ${email}`);
       return res.status(422).json({ message: 'Email já cadastrado!' });
     }
+
+    // Check if CPF already exists
+    const cpfExists = await User.findOne({ cpf: normalizedCpf });
+    if (cpfExists) {
+      logWarning(`Attempt to create user with existing CPF: ${normalizedCpf}`);
+      return res.status(422).json({ message: 'CPF já cadastrado!' });
+    }
+
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
     const user = new User({
       name,
       email,
       password: passwordHash,
+      phone: normalizedPhone,
+      birthDate: new Date(birthDate),
+      cpf: normalizedCpf,
       type: 'user'
     });
     await user.save();
-    logInfo(`User created with email: ${email}`);
+    logInfo(`User created with email: ${email} and CPF: ${normalizedCpf}`);
     res.status(201).json({ message: 'Usuário criado com sucesso!' });
   } catch (err) {
     logError('Error creating user', err);
@@ -425,5 +449,65 @@ exports.uploadUserPicture = async (req, res) => {
   } catch (err) {
     logError('Error uploading user picture', err);
     res.status(500).json({ message: 'Erro ao fazer upload da foto de perfil.' });
+  }
+};
+
+/**
+ * Reset user password.
+ * 
+ * This endpoint allows a user to reset their password by providing:
+ * - cpf: The user's CPF (required)
+ * - phone: The user's phone number (required)
+ * - birthDate: The user's birth date (required)
+ * - newPassword: The new password to be set (required)
+ * 
+ * Workflow:
+ * 1. Normalizes CPF and phone (removes non-digits).
+ * 2. Finds the user by normalized CPF.
+ * 3. Validates that the provided phone and birth date match the stored data.
+ * 4. If validation passes, hashes the new password using bcrypt.
+ * 5. Saves the new hashed password to the user document.
+ */
+exports.resetPassword = async (req, res) => {
+  const { cpf, phone, birthDate, newPassword } = req.body;
+
+  if (!cpf || !phone || !birthDate || !newPassword) {
+    return res.status(422).json({ message: 'Todos os campos são obrigatórios.' });
+  }
+
+  const normalizedCpf = cpf.replace(/\D/g, '');
+  const normalizedPhone = phone.replace(/\D/g, '');
+
+  try {
+    const user = await User.findOne({ cpf: normalizedCpf });
+
+    if (!user) {
+      logWarning(`Password reset attempt for non-existent CPF: ${normalizedCpf}`);
+      return res.status(401).json({ message: 'Dados de recuperação inválidos.' });
+    }
+
+    // Normalize stored phone for comparison just in case
+    const storedPhone = user.phone.replace(/\D/g, '');
+    
+    // Compare birth dates (ignoring time)
+    const providedDate = new Date(birthDate).toISOString().split('T')[0];
+    const storedDate = new Date(user.birthDate).toISOString().split('T')[0];
+
+    if (normalizedPhone !== storedPhone || providedDate !== storedDate) {
+      logWarning(`Invalid recovery data for CPF: ${normalizedCpf}`);
+      return res.status(401).json({ message: 'Dados de recuperação não conferem.' });
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    user.password = passwordHash;
+    await user.save();
+
+    logInfo(`Password reset successfully for CPF: ${normalizedCpf}`);
+    res.status(200).json({ message: 'Senha alterada com sucesso!' });
+  } catch (err) {
+    logError('Error resetting password', err);
+    res.status(500).json({ message: 'Erro ao resetar senha.' });
   }
 };

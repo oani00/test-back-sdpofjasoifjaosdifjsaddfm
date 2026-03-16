@@ -12,9 +12,12 @@
 const mongoose = require('mongoose');
 
 const User = mongoose.model('User', {
-    name: String,
-    email: String,
-    password: String,
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password: { type: String, required: true },
+    phone: { type: String, required: true, trim: true },
+    birthDate: { type: Date, required: true },
+    cpf: { type: String, required: true, unique: true, trim: true },
     type: { type: String, enum: ['user', 'admin'], required: true },
     picture_base64: String, 
     picture: { type: mongoose.Schema.Types.ObjectId, ref: 'Picture' },

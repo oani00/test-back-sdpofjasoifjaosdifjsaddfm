@@ -44,5 +44,10 @@ router.post('/users/:id/picture', upload.single('picture'), userController.uploa
 router.post('/users/:userId/subscribe/:excursionId', userController.subscribeToExcursion);
 router.post('/users/:userId/unsubscribe/:excursionId', userController.unsubscribeFromExcursion);
 
+/**
+ * @desc Reset user password
+ */
+router.post('/SignUp/ResetPassword', userController.resetPassword);
+
 
 module.exports = router;
