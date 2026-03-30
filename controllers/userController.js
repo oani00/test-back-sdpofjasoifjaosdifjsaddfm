@@ -1,9 +1,21 @@
+const mongoose = require('mongoose');
 const { logInfo, logWarning, logError } = require('../utils/logger');
 const User = require('../models/User');
 const Excursion = require('../models/Excursion'); // Needed for subscribe/unsubscribe operations
 const Picture = require('../models/Picture');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+
+/**
+ * Find a user by normalized phone digits.
+ */
+async function findUserByLoginIdentifier(raw) {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return null;
+  const normalizedPhone = trimmed.replace(/\D/g, '');
+  if (!normalizedPhone) return null;
+  return User.findOne({ phone: normalizedPhone });
+}
 
 /**
  * Get all users
@@ -38,29 +50,60 @@ exports.getUserById = async (req, res) => {
 };
 
 /**
+ * Resolve user by phone (normalized digits) for admin flows — returns id without password.
+ */
+exports.getUserByPhone = async (req, res) => {
+  const raw = String(req.query.phone || '').trim();
+  if (!raw) {
+    return res.status(422).json({ message: 'O parâmetro phone é obrigatório.' });
+  }
+
+  try {
+    const user = await findUserByLoginIdentifier(raw);
+    if (!user) {
+      logWarning('GetUserByPhone: no matching user');
+      return res.status(404).json({ message: 'Usuário não encontrado.' });
+    }
+
+    logInfo(`GetUserByPhone: resolved user ${user._id}`);
+    res.status(200).json({
+      id: user._id,
+      name: user.name,
+      phone: user.phone,
+      type: user.type,
+      picture: user.picture
+    });
+  } catch (err) {
+    logError('Error fetching user by phone', err);
+    res.status(500).json({ message: 'Erro ao buscar usuário.' });
+  }
+};
+
+/**
  * Create a new user account.
  *
  * This endpoint registers a new user in the system. It expects the following fields in the request body:
  * - name: The user's full name (required)
- * - email: The user's email address (required, must be unique)
  * - password: The user's password (required, will be securely hashed)
+ * - phone: Mobile/phone number, digits only or formatted (required, must be unique)
+ * - birthDate: Date of birth (required)
+ * - cpf: CPF digits (required, must be unique)
  *
  * Workflow:
  * 1. Validates that all required fields are present.
- * 2. Checks if the provided email or CPF is already registered.
+ * 2. Checks if the provided phone or CPF is already registered.
  * 3. Hashes the password using bcrypt for security.
  * 4. Creates and saves the new user in the database.
  * 5. Logs the creation event and returns a success message.
  *
  * Responses:
  * - 201: User created successfully.
- * - 422: Missing required fields, email already registered, or CPF already registered.
+ * - 422: Missing required fields, phone already registered, or CPF already registered.
  * - 500: Server error during user creation.
  *
  * Example request body:
  * {
  *   "name": "João Silva",
- *   "email": "joao@email.com",
  *   "password": "minhasenha123",
  *   "phone": "11999999999",
  *   "birthDate": "1990-01-01",
@@ -68,9 +111,9 @@ exports.getUserById = async (req, res) => {
  * }
  */
 exports.createUser = async (req, res) => {
-  const { name, email, password, phone, birthDate, cpf } = req.body;
+  const { name, password, phone, birthDate, cpf } = req.body;
   // Basic validation
-  if (!name || !email || !password || !phone || !birthDate || !cpf) {
+  if (!name || !password || !phone || !birthDate || !cpf) {
     return res.status(422).json({ message: 'Todos os campos são obrigatórios.' });
   }
 
@@ -82,12 +125,15 @@ exports.createUser = async (req, res) => {
     return res.status(422).json({ message: 'CPF deve conter 11 dígitos.' });
   }
 
+  if (normalizedPhone.length < 10 || normalizedPhone.length > 11) {
+    return res.status(422).json({ message: 'Telefone deve ter 10 ou 11 dígitos.' });
+  }
+
   try {
-    // Check if email already exists
-    const emailExists = await User.findOne({ email });
-    if (emailExists) {
-      logWarning(`Attempt to create user with existing email: ${email}`);
-      return res.status(422).json({ message: 'Email já cadastrado!' });
+    const phoneExists = await User.findOne({ phone: normalizedPhone });
+    if (phoneExists) {
+      logWarning(`Attempt to create user with existing phone: ${normalizedPhone}`);
+      return res.status(422).json({ message: 'Telefone já cadastrado!' });
     }
 
     // Check if CPF already exists
@@ -101,7 +147,6 @@ exports.createUser = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, salt);
     const user = new User({
       name,
-      email,
       password: passwordHash,
       phone: normalizedPhone,
       birthDate: new Date(birthDate),
@@ -109,8 +154,8 @@ exports.createUser = async (req, res) => {
       type: 'user'
     });
     await user.save();
-    logInfo(`User created with email: ${email} and CPF: ${normalizedCpf}`);
-    res.status(201).json({ message: 'Usuário criado com sucesso!' });
+    logInfo(`User created with phone: ${normalizedPhone} and CPF: ${normalizedCpf}`);
+    res.status(201).json({ message: 'Usuário criado com sucesso! Redirecionando para a página de login.' });
   } catch (err) {
     logError('Error creating user', err);
     res.status(500).json({ message: 'Erro ao criar usuário.' });
@@ -140,25 +185,25 @@ exports.deleteUserById = async (req, res) => {
  *
  * This endpoint allows a registered user to log in by verifying their credentials.
  * It expects the following fields in the request body:
- * - email: The user's registered email address (required)
+ * - phone: The user's registered phone number (required)
  * - password: The user's password (required)
  *
  * Workflow:
- * 1. Validates that both email and password are provided.
- * 2. Searches for a user with the given email.
+ * 1. Validates that both phone and password are provided.
+ * 2. Searches for a user with the given phone (normalized digits).
  * 3. If the user exists, compares the provided password with the stored hashed password using bcrypt.
  * 4. If authentication is successful, generates a JWT token for session management.
  * 5. Logs the login event and returns user details and the token.
  *
  * Responses:
  * - 200: Login successful. Returns JWT token and user info.
- * - 401: Invalid email or password.
+ * - 401: Invalid phone or password.
  * - 422: Missing required fields.
  * - 500: Server error during login.
  *
  * Example request body:
  * {
- *   "email": "joao@email.com",
+ *   "phone": "11999999999",
  *   "password": "minhasenha123"
  * }
  *
@@ -169,33 +214,32 @@ exports.deleteUserById = async (req, res) => {
  *   "user": {
  *     "id": "<user_id>",
  *     "name": "João Silva",
- *     "email": "joao@email.com"
+ *     "phone": "11999999999"
  *   }
  * }
  */
 exports.loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  const { phone, password } = req.body;
+  const rawLogin = String(phone ?? '').trim();
 
   // Validations
-  if (!email) return res.status(422).json({ message: 'O email é obrigatório!' });
+  if (!rawLogin) return res.status(422).json({ message: 'O telefone é obrigatório!' });
   if (!password) return res.status(422).json({ message: 'A senha é obrigatória!' });
 
   try {
-    
-    const invalidUserOrEmail = 'Email ou senha inválido.';
-    
-    // Check if user exists
-    const user = await User.findOne({ email: email });
+    const invalidMsg = 'Telefone ou senha inválido.';
+
+    const user = await findUserByLoginIdentifier(rawLogin);
     if (!user) {
-      logWarning(`Login attempt for non-existent email: ${email}`);
-      return res.status(401).json({ message: invalidUserOrEmail });
+      logWarning(`Login attempt for non-existent identifier: ${rawLogin}`);
+      return res.status(401).json({ message: invalidMsg });
     }
 
     // Check if password matches
     const checkPassword = await bcrypt.compare(password, user.password);
     if (!checkPassword) {
-      logWarning(`Invalid password attempt for email: ${email}`);
-      return res.status(401).json({ message: invalidUserOrEmail });
+      logWarning(`Invalid password attempt for user: ${user._id}`);
+      return res.status(401).json({ message: invalidMsg });
     }
 
     // Generate JWT
@@ -206,14 +250,14 @@ exports.loginUser = async (req, res) => {
       secret
     );
 
-    logInfo(`User logged in: ${email}`);
+    logInfo(`User logged in: ${user.phone}`);
     res.status(200).json({
       message: 'Autenticado com sucesso!',
       token: token,
       user: {
         id: user._id,
         name: user.name,
-        email: user.email,
+        phone: user.phone,
         type: user.type,
         picture: user.picture ? user.picture.toString() : null
       }
@@ -275,108 +319,51 @@ exports.unsubscribeFromExcursion = async (req, res) => {
 };
 
 /**
- * Change user type (promote/demote between user and admin)
- * 
- * This endpoint allows changing a user's type between 'user' and 'admin'.
- * Only admin users can perform this operation.
- * 
- * It expects the following parameter in the URL:
- * - id: The target user's ID (required)
- * 
- * And the following fields in the request body:
- * - type: The new user type ('user' or 'admin') (required)
- * - requestingUserEmail: The email of the user making the request (required)
- * - requestingUserPassword: The password of the user making the request (required)
- * 
- * Workflow:
- * 1. Validates that all required fields are provided
- * 2. Authenticates the requesting user
- * 3. Checks if the requesting user is an admin
- * 4. Searches for the target user by ID
- * 5. Updates the target user's type
- * 6. Logs the change and returns success message
- * 
- * Responses:
- * - 200: User type changed successfully
- * - 400: Invalid type provided
- * - 401: Invalid credentials or requesting user is not an admin
- * - 404: Target user not found
- * - 422: Missing required fields
- * - 500: Server error during update
- * 
- * Example request body:
- * {
- *   "type": "admin",
- *   "requestingUserEmail": "admin@example.com",
- *   "requestingUserPassword": "adminpassword"
- * }
+ * Partial update of a user resource (REST). Currently only `role` is accepted in the body;
+ * persisted as the User model `type` field (`user` | `admin`).
+ * POC: no server-side auth; intended for admin-only UI access.
  */
-exports.changeUserType = async (req, res) => {
-  const { type, requestingUserEmail, requestingUserPassword } = req.body;
+exports.patchUser = async (req, res) => {
   const userId = req.params.id;
+  const { role } = req.body;
 
-  // Validation
-  if (!type) {
-    return res.status(422).json({ message: 'O tipo de usuário é obrigatório.' });
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ message: 'ID de usuário inválido.' });
   }
 
-  if (!requestingUserEmail) {
-    return res.status(422).json({ message: 'O email do usuário solicitante é obrigatório.' });
+  if (role === undefined || role === null || String(role).trim() === '') {
+    return res.status(422).json({ message: 'O campo role é obrigatório.' });
   }
 
-  if (!requestingUserPassword) {
-    return res.status(422).json({ message: 'A senha do usuário solicitante é obrigatória.' });
-  }
-
-  if (!['user', 'admin'].includes(type)) {
-    return res.status(400).json({ message: 'Tipo de usuário inválido. Use "user" ou "admin".' });
+  const roleStr = String(role).trim();
+  if (!['user', 'admin'].includes(roleStr)) {
+    return res.status(400).json({ message: 'Role inválida. Use "user" ou "admin".' });
   }
 
   try {
-    // Authenticate the requesting user
-    const requestingUser = await User.findOne({ email: requestingUserEmail });
-    if (!requestingUser) {
-      logWarning(`User type change attempt with non-existent requesting user email: ${requestingUserEmail}`);
-      return res.status(401).json({ message: 'Credenciais inválidas.' });
-    }
-
-    // Check if requesting user's password is correct
-    const checkPassword = await bcrypt.compare(requestingUserPassword, requestingUser.password);
-    if (!checkPassword) {
-      logWarning(`User type change attempt with invalid password for requesting user: ${requestingUserEmail}`);
-      return res.status(401).json({ message: 'Credenciais inválidas.' });
-    }
-
-    // Check if requesting user is an admin
-    if (requestingUser.type !== 'admin') {
-      logWarning(`User type change attempt by non-admin user: ${requestingUserEmail}`);
-      return res.status(401).json({ message: 'Apenas administradores podem alterar tipos de usuário.' });
-    }
-
-    // Find the target user
     const targetUser = await User.findById(userId);
     if (!targetUser) {
-      logWarning(`Attempt to change type for non-existent target user with ID: ${userId}`);
+      logWarning(`PATCH /users/:id — user not found: ${userId}`);
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
 
     const previousType = targetUser.type;
-    targetUser.type = type;
+    targetUser.type = roleStr;
     await targetUser.save();
 
-    logInfo(`User type changed from ${previousType} to ${type} for user ID: ${userId} by admin: ${requestingUserEmail}`);
-    res.status(200).json({ 
-      message: `Tipo de usuário alterado para ${type} com sucesso!`,
+    logInfo(`User role/type changed from ${previousType} to ${roleStr} for user ${targetUser._id}`);
+    res.status(200).json({
+      message: `Papel alterado para ${roleStr} com sucesso!`,
       user: {
         id: targetUser._id,
         name: targetUser.name,
-        email: targetUser.email,
+        phone: targetUser.phone,
         type: targetUser.type
       }
     });
   } catch (err) {
-    logError('Error changing user type', err);
-    res.status(500).json({ message: 'Erro ao alterar tipo de usuário.' });
+    logError('Error patching user', err);
+    res.status(500).json({ message: 'Erro ao atualizar usuário.' });
   }
 };
 

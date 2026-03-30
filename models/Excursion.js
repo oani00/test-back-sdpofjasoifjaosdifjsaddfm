@@ -10,6 +10,7 @@
  * @property {'passeio'|'viagem'} type - Excursion type
  * @property {ObjectId[]} pictures - Array of Picture references
  * @property {ObjectId[]} users - Array of User references
+ * @property {Date} returnDate - Return date of excursion
  */
 const mongoose = require('mongoose');
 
@@ -17,6 +18,7 @@ const excursionSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: String,
   date: Date,
+  returnDate: Date,
   location: String,
   price: Number,
   type: { type: String, enum: ['passeio', 'viagem'], required: true },

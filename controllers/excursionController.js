@@ -49,13 +49,14 @@ exports.getExcursionById = async (req, res) => {
  */
 exports.createExcursion = async (req, res) => {
   try {
-    const { name, description, date, location, price, type } = req.body;
+    const { name, description, date, returnDate, location, price, type } = req.body;
     const file = req.file;
     
     const excursionData = {
       name,
       description: description || undefined,
       date: date ? new Date(date) : undefined,
+      returnDate: returnDate ? new Date(returnDate) : undefined,
       location: location || undefined,
       price: price ? Number(price) : undefined,
       type,
@@ -93,13 +94,14 @@ exports.createExcursion = async (req, res) => {
  */
 exports.updateExcursion = async (req, res) => {
   try {
-    const { name, description, date, location, price, type } = req.body;
+    const { name, description, date, returnDate, location, price, type } = req.body;
     const file = req.file;
     
     const updateData = {
       name,
       description: description || undefined,
       date: date ? new Date(date) : undefined,
+      returnDate: returnDate ? new Date(returnDate) : undefined,
       location: location || undefined,
       price: price ? Number(price) : undefined,
       type

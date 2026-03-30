@@ -54,8 +54,10 @@ Representa tanto os clientes quanto os administradores do sistema.
 
 **Campos:**
 - `name` (String) - Nome completo do usuário
-- `email` (String) - Email único (usado para login)
+- `phone` (String) - Telefone único (normalizado, usado para login)
 - `password` (String) - Senha hashada com bcrypt
+- `birthDate` (Date) - Data de nascimento
+- `cpf` (String) - CPF único (normalizado)
 - `type` (String) - Tipo: 'user' ou 'admin'
 - `picture` (ObjectId) - Referência para imagem de perfil
 - `picture_base64` (String) - Campo legado (não utilizado)
@@ -72,6 +74,7 @@ Entidade principal representando os passeios oferecidos pelas microempresas.
 - `name` (String, obrigatório) - Nome do passeio
 - `description` (String) - Descrição detalhada
 - `date` (Date) - Data e hora do passeio
+- `returnDate` (Date) - Data de volta
 - `location` (String) - Localização do passeio
 - `price` (Number) - Preço por pessoa
 - `type` (String, obrigatório) - Tipo: 'passeio' ou 'viagem'
@@ -102,7 +105,7 @@ Sistema de logging para rastrear operações importantes do sistema.
 ## Funcionalidades Principais
 
 ### Gerenciamento de Usuários
-- **Cadastro**: Criação de conta com nome, email, senha, telefone, CPF e data de nascimento
+- **Cadastro**: Criação de conta com nome, senha, telefone, CPF e data de nascimento
 - **Login**: Autenticação JWT retornando token e dados do usuário
 - **Recuperação de Senha**: Troca de senha via validação de CPF, telefone e data de nascimento (mock)
 - **Listagem**: Visualização de todos os usuários (admin)
@@ -124,7 +127,7 @@ Sistema de logging para rastrear operações importantes do sistema.
 ### Sistema de Logs
 - **Auditoria**: Logs de todas as operações importantes
 - **Níveis**: Info, Warning e Error
-- **Metadados**: Informações contextuais (IDs, emails, etc.)
+- **Metadados**: Informações contextuais (IDs, telefones, etc.)
 - **Persistência**: Logs armazenados permanentemente no banco
 
 ## API REST
@@ -139,11 +142,14 @@ http://localhost:3000
 #### Usuários (/SignUp/*)
 - `GET /SignUp/GetAllUsers` - Lista todos os usuários
 - `GET /SignUp/GetUserById/:id` - Busca usuário por ID
+- `GET /SignUp/GetUserByPhone?phone=` - Resolve usuário pelo telefone (normalizado como no login); resposta sem senha (`id`, `name`, `phone`, `type`, `picture`)
 - `POST /SignUp/CreateUser` - Cria novo usuário
 - `DELETE /SignUp/DeleteUserById/:id` - Exclui usuário
 - `POST /SignUp/login/:userId` - Login (userId ignorado na lógica)
 - `POST /SignUp/ResetPassword` - Recuperação de senha (valida CPF, telefone e data de nascimento)
-- `PUT /SignUp/ChangeUserType/:id` - Altera tipo do usuário (admin only)
+
+#### Usuários (/users — além de /SignUp)
+- `PATCH /users/:id` - Atualização parcial do usuário; hoje aceita só `role` no body (`user` | `admin`), persistido como `type` no modelo. POC: sem checagem de admin no servidor; restrito no front ao painel admin.
 
 #### Inscrições em Passeios
 - `POST /users/:userId/subscribe/:excursionId` - Inscreve usuário em passeio
@@ -174,22 +180,29 @@ http://localhost:3000
 |--------|------|-----------|
 | GET | `/SignUp/GetAllUsers` | Lista todos os usuários |
 | GET | `/SignUp/GetUserById/:id` | Busca usuário por ID |
+| GET | `/SignUp/GetUserByPhone` | Busca por `?phone=` — retorna `id` e campos públicos (sem senha) |
 | POST | `/SignUp/CreateUser` | Cria novo usuário |
 | DELETE | `/SignUp/DeleteUserById/:id` | Exclui usuário por ID |
 | POST | `/SignUp/login/:userId` | Login (retorna JWT e dados do usuário; `userId` ignorado) |
 | POST | `/SignUp/ResetPassword` | Recuperação de senha |
-| PUT | `/SignUp/ChangeUserType/:id` | Altera tipo do usuário (admin only) |
+| PATCH | `/users/:id` | Atualização parcial (ex.: body `{ role }` → grava `type`; POC sem auth na rota) |
 | POST | `/users/:id/picture` | Upload de foto de perfil (multipart/form-data, campo `picture`) |
 | POST | `/users/:userId/subscribe/:excursionId` | Inscreve usuário em passeio |
 | POST | `/users/:userId/unsubscribe/:excursionId` | Cancela inscrição em passeio |
 
 #### POST /SignUp/CreateUser
-**Body:** `{ name, email, password, phone, birthDate, cpf }`  
+**Body:** `{ name, password, phone, birthDate, cpf }`  
 CPF e telefone são normalizados (apenas dígitos). Senha é hashada com bcrypt (salt 12).
 
 #### POST /SignUp/login/:userId
-**Body:** `{ email, password }`  
-Retorna `{ message, token, user }` com `user` contendo `id`, `name`, `email`, `type`, `picture`.
+**Body:** `{ phone, password }`  
+Retorna `{ message, token, user }` com `user` contendo `id`, `name`, `phone`, `type`, `picture`.
+
+#### GET /SignUp/GetUserByPhone
+**Query:** `phone` (obrigatório) — aceita dígitos com ou sem máscara; mesma normalização do login.
+
+**Resposta 200:** `{ id, name, phone, type, picture }` — sem `password`.  
+**Erros:** 422 se `phone` ausente; 404 se não existir usuário; 500 em falha interna.
 
 #### POST /SignUp/ResetPassword
 **Body:** `{ cpf, phone, birthDate, newPassword }`  
@@ -198,9 +211,15 @@ Retorna `{ message, token, user }` com `user` contendo `id`, `name`, `email`, `t
 - Sobrescreve senha com hash bcrypt (mesmo processo do cadastro)  
 - 401 se dados não conferirem; 200 com `{ message: 'Senha alterada com sucesso!' }`
 
-#### PUT /SignUp/ChangeUserType/:id
-**Body:** `{ type, requestingUserEmail, requestingUserPassword }`  
-Requer autenticação do admin solicitante.
+#### PATCH /users/:id
+**Path:** `id` — ObjectId do usuário (MongoDB).  
+**Body (JSON):** `{ "role": "user" | "admin" }` — obrigatório; mapeado para o campo `type` no documento.
+
+**Resposta 200:** `{ message, user: { id, name, phone, type } }`  
+
+**Erros:** 400 ID inválido ou `role` inválida; 422 `role` ausente; 404 usuário não encontrado; 500 erro interno.
+
+**Segurança (POC):** não há validação de JWT nem de credenciais do solicitante nesta rota; o controle de acesso depende do front (painel admin). Para produção, proteger com middleware de admin ou token.
 
 ### excursionRoutes.js
 
@@ -260,7 +279,7 @@ npm start  # Usa nodemon em desenvolvimento
 
 ### 1. Cadastro e Login
 1. Usuário se cadastra via `POST /SignUp/CreateUser`
-2. Sistema valida email único e hasha senha
+2. Sistema valida telefone e CPF únicos e hasha senha
 3. Usuário faz login via `POST /SignUp/login/:userId`
 4. Sistema retorna JWT token para sessões futuras
 
@@ -302,25 +321,6 @@ npm start  # Usa nodemon em desenvolvimento
 - Rate limiting
 - CORS configurável via env
 
-## Melhorias Futuras
-
-### Funcionalidades
-- [ ] Sistema de pagamentos
-- [ ] Notificações por email
-- [ ] Avaliações e comentários dos passeios
-- [ ] Capacidade máxima por passeio
-- [ ] Filtros e busca avançada
-- [ ] Dashboard administrativo
-- [ ] Relatórios e estatísticas
-
-### Técnica
-- [ ] Middleware JWT para proteção de rotas
-- [ ] Paginação para listas grandes
-- [ ] Cache (Redis)
-- [ ] Testes automatizados
-- [ ] Documentação OpenAPI/Swagger
-- [ ] Containerização (Docker)
-- [ ] CI/CD pipeline
 
 ## Considerações de Design
 

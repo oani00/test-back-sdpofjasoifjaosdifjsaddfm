@@ -14,6 +14,11 @@ router.get('/SignUp/GetAllUsers', userController.getAllUsers);
 router.get('/SignUp/GetUserById/:id', userController.getUserById);
 
 /**
+ * @desc Get user id and public fields by phone (query: ?phone=)
+ */
+router.get('/SignUp/GetUserByPhone', userController.getUserByPhone);
+
+/**
  * @desc Create a new user
  */
 router.post('/SignUp/CreateUser', userController.createUser);
@@ -29,9 +34,9 @@ router.delete('/SignUp/DeleteUserById/:id', userController.deleteUserById);
 router.post('/SignUp/login/:userId', userController.loginUser);
 
 /**
- * @desc Change user type (promote/demote between user and admin)
+ * @desc Partial update user (e.g. role); body: { role: "user" | "admin" }
  */
-router.put('/SignUp/ChangeUserType/:id', userController.changeUserType);
+router.patch('/users/:id', userController.patchUser);
 
 /**
  * @desc Upload a profile picture for a user
