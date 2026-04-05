@@ -6,6 +6,18 @@ const upload = require('../config/multer');
 // List all excursions
 router.get('/excursions', excursionController.getAllExcursions);
 
+// Admin: disenroll user 
+router.delete(
+  '/excursions/:excursionId/users/:userId',
+  excursionController.disenrollUserFromExcursion
+);
+
+// Admin: toggle paid flag for an enrolled user
+router.patch(
+  '/excursions/:excursionId/users/:userId',
+  excursionController.patchExcursionUserPaid
+);
+
 // Get excursion by ID
 router.get('/excursions/:id', excursionController.getExcursionById);
 
