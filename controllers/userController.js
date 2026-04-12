@@ -22,11 +22,12 @@ async function findUserByLoginIdentifier(raw) {
  */
 exports.getAllUsers = async (req, res) => {
   try {
-    logInfo('Fetching all users');
+    await logInfo('[getAllUsers] start');
     const users = await User.find();
+    await logInfo('[getAllUsers] ok', { count: users.length });
     res.status(200).json(users);
   } catch (err) {
-    logError('Error fetching users', err);
+    await logError('Error fetching users', { tag: '[getAllUsers]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao buscar usuários.' });
   }
 };
@@ -36,15 +37,16 @@ exports.getAllUsers = async (req, res) => {
  */
 exports.getUserById = async (req, res) => {
   try {
+    await logInfo('[getUserById] start', { id: req.params.id });
     const user = await User.findById(req.params.id);
     if (!user) {
-      logWarning(`User not found with ID: ${req.params.id}`);
+      await logWarning(`User not found with ID: ${req.params.id}`);
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
-    logInfo(`User fetched by ID: ${req.params.id}`);
+    await logInfo(`User fetched by ID: ${req.params.id}`);
     res.status(200).json(user);
   } catch (err) {
-    logError('Error fetching user by ID', err);
+    await logError('Error fetching user by ID', { tag: '[getUserById]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao buscar usuário.' });
   }
 };
@@ -59,13 +61,14 @@ exports.getUserByPhone = async (req, res) => {
   }
 
   try {
+    await logInfo('[getUserByPhone] start', { phoneParamLength: raw.length });
     const user = await findUserByLoginIdentifier(raw);
     if (!user) {
-      logWarning('GetUserByPhone: no matching user');
+      await logWarning('GetUserByPhone: no matching user');
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
 
-    logInfo(`GetUserByPhone: resolved user ${user._id}`);
+    await logInfo(`GetUserByPhone: resolved user ${user._id}`);
     res.status(200).json({
       id: user._id,
       name: user.name,
@@ -74,7 +77,7 @@ exports.getUserByPhone = async (req, res) => {
       picture: user.picture
     });
   } catch (err) {
-    logError('Error fetching user by phone', err);
+    await logError('Error fetching user by phone', { tag: '[getUserByPhone]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao buscar usuário.' });
   }
 };
@@ -130,21 +133,30 @@ exports.createUser = async (req, res) => {
   }
 
   try {
+    await logInfo('[CreateUser] enter', { phoneDigits: normalizedPhone.length, cpfDigits: normalizedCpf.length });
+
+    await logInfo('[CreateUser] phone duplicate check');
     const phoneExists = await User.findOne({ phone: normalizedPhone });
+    await logInfo('[CreateUser] phone duplicate check done', { exists: !!phoneExists });
     if (phoneExists) {
-      logWarning(`Attempt to create user with existing phone: ${normalizedPhone}`);
+      await logWarning(`Attempt to create user with existing phone: ${normalizedPhone}`);
       return res.status(422).json({ message: 'Telefone já cadastrado!' });
     }
 
-    // Check if CPF already exists
+    await logInfo('[CreateUser] CPF duplicate check');
     const cpfExists = await User.findOne({ cpf: normalizedCpf });
+    await logInfo('[CreateUser] CPF duplicate check done', { exists: !!cpfExists });
     if (cpfExists) {
-      logWarning(`Attempt to create user with existing CPF: ${normalizedCpf}`);
+      await logWarning(`Attempt to create user with existing CPF: ${normalizedCpf}`);
       return res.status(422).json({ message: 'CPF já cadastrado!' });
     }
 
+    await logInfo('[CreateUser] bcrypt start');
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
+    await logInfo('[CreateUser] bcrypt done');
+
+    await logInfo('[CreateUser] build User', { birthDateRaw: birthDate });
     const user = new User({
       name,
       password: passwordHash,
@@ -153,11 +165,14 @@ exports.createUser = async (req, res) => {
       cpf: normalizedCpf,
       type: 'user'
     });
+    await logInfo('[CreateUser] user.save()');
     await user.save();
-    logInfo(`User created with phone: ${normalizedPhone} and CPF: ${normalizedCpf}`);
+    await logInfo('[CreateUser] user.save ok', { userId: user._id?.toString() });
+
+    await logInfo(`User created with phone: ${normalizedPhone} and CPF: ${normalizedCpf}`);
     res.status(201).json({ message: 'Usuário criado com sucesso! Redirecionando para a página de login.' });
   } catch (err) {
-    logError('Error creating user', err);
+    await logError('Error creating user', { tag: '[CreateUser]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao criar usuário.' });
   }
 };
@@ -167,15 +182,16 @@ exports.createUser = async (req, res) => {
  */
 exports.deleteUserById = async (req, res) => {
   try {
+    await logInfo('[deleteUserById] start', { id: req.params.id });
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) {
-      logWarning(`Attempt to delete non-existent user with ID: ${req.params.id}`);
+      await logWarning(`Attempt to delete non-existent user with ID: ${req.params.id}`);
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
-    logInfo(`User deleted with ID: ${req.params.id}`);
+    await logInfo(`User deleted with ID: ${req.params.id}`);
     res.status(204).send();
   } catch (err) {
-    logError('Error deleting user', err);
+    await logError('Error deleting user', { tag: '[deleteUserById]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao deletar usuário.' });
   }
 };
@@ -227,22 +243,24 @@ exports.loginUser = async (req, res) => {
   if (!password) return res.status(422).json({ message: 'A senha é obrigatória!' });
 
   try {
+    await logInfo('[loginUser] attempt', { loginFieldLength: rawLogin.length });
     const invalidMsg = 'Telefone ou senha inválido.';
 
+    await logInfo('[loginUser] find user');
     const user = await findUserByLoginIdentifier(rawLogin);
     if (!user) {
-      logWarning(`Login attempt for non-existent identifier: ${rawLogin}`);
+      await logWarning(`Login attempt for non-existent identifier: ${rawLogin}`);
       return res.status(401).json({ message: invalidMsg });
     }
 
-    // Check if password matches
+    await logInfo('[loginUser] compare password');
     const checkPassword = await bcrypt.compare(password, user.password);
     if (!checkPassword) {
-      logWarning(`Invalid password attempt for user: ${user._id}`);
+      await logWarning(`Invalid password attempt for user: ${user._id}`);
       return res.status(401).json({ message: invalidMsg });
     }
 
-    // Generate JWT
+    await logInfo('[loginUser] sign JWT');
     const secret = process.env.SECRET;
    
     const token = jwt.sign(
@@ -250,7 +268,7 @@ exports.loginUser = async (req, res) => {
       secret
     );
 
-    logInfo(`User logged in: ${user.phone}`);
+    await logInfo(`User logged in: ${user.phone}`);
     res.status(200).json({
       message: 'Autenticado com sucesso!',
       token: token,
@@ -263,7 +281,7 @@ exports.loginUser = async (req, res) => {
       }
     });
   } catch (err) {
-    logError('Error logging in user', err);
+    await logError('Error logging in user', { tag: '[loginUser]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Aconteceu um erro no servidor, tente novamente mais tarde!' });
   }
 };
@@ -275,24 +293,27 @@ exports.subscribeToExcursion = async (req, res) => {
   const userId = req.params.userId;
   const excursionId = req.params.excursionId;
   try {
+    await logInfo('[subscribeToExcursion] start', { userId, excursionId });
     const user = await User.findById(userId);
     const excursion = await Excursion.findById(excursionId);
     if (!user || !excursion) return res.status(404).json({ message: 'Usuário ou excursão não encontrado.' });
 
-    // Add excursion to user if not already present
     if (!user.excursions?.includes(excursionId)) {
+      await logInfo('[subscribeToExcursion] push excursion on user');
       user.excursions = user.excursions || [];
       user.excursions.push(excursionId);
       await user.save();
     }
-    // Add user to excursion if not already present
     if (!excursion.users?.includes(userId)) {
+      await logInfo('[subscribeToExcursion] push user on excursion');
       excursion.users = excursion.users || [];
       excursion.users.push(userId);
       await excursion.save();
     }
+    await logInfo('[subscribeToExcursion] ok');
     res.status(200).json({ message: 'Inscrito na excursão com sucesso!' });
   } catch (err) {
+    await logError('Error subscribing to excursion', { tag: '[subscribeToExcursion]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao inscrever na excursão.' });
   }
 };
@@ -302,18 +323,22 @@ exports.unsubscribeFromExcursion = async (req, res) => {
   const userId = req.params.userId;
   const excursionId = req.params.excursionId;
   try {
+    await logInfo('[unsubscribeFromExcursion] start', { userId, excursionId });
     const user = await User.findById(userId);
     const excursion = await Excursion.findById(excursionId);
     if (!user || !excursion) return res.status(404).json({ message: 'Usuário ou excursão não encontrado.' });
 
+    await logInfo('[unsubscribeFromExcursion] update user and excursion');
     user.excursions = (user.excursions || []).filter(eId => eId.toString() !== excursionId);
     await user.save();
 
     excursion.users = (excursion.users || []).filter(uId => uId.toString() !== userId);
     await excursion.save();
 
+    await logInfo('[unsubscribeFromExcursion] ok');
     res.status(200).json({ message: 'Desinscrito da excursão com sucesso!' });
   } catch (err) {
+    await logError('Error unsubscribing from excursion', { tag: '[unsubscribeFromExcursion]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao desinscrever da excursão.' });
   }
 };
@@ -341,9 +366,10 @@ exports.patchUser = async (req, res) => {
   }
 
   try {
+    await logInfo('[patchUser] start', { userId, role: roleStr });
     const targetUser = await User.findById(userId);
     if (!targetUser) {
-      logWarning(`PATCH /users/:id — user not found: ${userId}`);
+      await logWarning(`PATCH /users/:id — user not found: ${userId}`);
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
 
@@ -351,7 +377,7 @@ exports.patchUser = async (req, res) => {
     targetUser.type = roleStr;
     await targetUser.save();
 
-    logInfo(`User role/type changed from ${previousType} to ${roleStr} for user ${targetUser._id}`);
+    await logInfo(`User role/type changed from ${previousType} to ${roleStr} for user ${targetUser._id}`);
     res.status(200).json({
       message: `Papel alterado para ${roleStr} com sucesso!`,
       user: {
@@ -362,7 +388,7 @@ exports.patchUser = async (req, res) => {
       }
     });
   } catch (err) {
-    logError('Error patching user', err);
+    await logError('Error patching user', { tag: '[patchUser]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao atualizar usuário.' });
   }
 };
@@ -390,8 +416,9 @@ exports.patchUser = async (req, res) => {
  */
 exports.uploadUserPicture = async (req, res) => {
   try {
+    await logInfo('[uploadUserPicture] start', { userId: req.params.id, hasFile: !!req.file });
     if (!req.file) {
-      logWarning('Upload attempt without file');
+      await logWarning('Upload attempt without file');
       return res.status(400).json({ message: 'Nenhuma imagem foi enviada.' });
     }
 
@@ -399,22 +426,24 @@ exports.uploadUserPicture = async (req, res) => {
     const user = await User.findById(userId);
     
     if (!user) {
-      logWarning(`Attempt to upload picture for non-existent user with ID: ${userId}`);
+      await logWarning(`Attempt to upload picture for non-existent user with ID: ${userId}`);
       return res.status(404).json({ message: 'Usuário não encontrado.' });
     }
 
-    // Delete old picture if exists
     if (user.picture) {
       try {
         await Picture.findByIdAndDelete(user.picture);
-        logInfo(`Deleted old picture ${user.picture} for user ${userId}`);
+        await logInfo(`Deleted old picture ${user.picture} for user ${userId}`);
       } catch (err) {
-        logWarning(`Error deleting old picture ${user.picture}:`, err);
-        // Continue even if deletion fails
+        await logWarning(`Error deleting old picture ${user.picture}`, {
+          message: err?.message,
+          stack: err?.stack,
+          name: err?.name
+        });
       }
     }
 
-    // Create new picture document
+    await logInfo('[uploadUserPicture] create Picture document');
     const picture = new Picture({
       name: req.file.originalname || 'profile-picture',
       data: req.file.buffer,
@@ -422,19 +451,19 @@ exports.uploadUserPicture = async (req, res) => {
     });
 
     await picture.save();
-    logInfo(`Created new picture ${picture._id} for user ${userId}`);
+    await logInfo(`Created new picture ${picture._id} for user ${userId}`);
 
-    // Associate picture to user
+    await logInfo('[uploadUserPicture] associate picture to user');
     user.picture = picture._id;
     await user.save();
 
-    logInfo(`Picture ${picture._id} associated to user ${userId}`);
+    await logInfo(`Picture ${picture._id} associated to user ${userId}`);
     res.status(200).json({
       message: 'Foto de perfil atualizada com sucesso!',
       pictureId: picture._id.toString()
     });
   } catch (err) {
-    logError('Error uploading user picture', err);
+    await logError('Error uploading user picture', { tag: '[uploadUserPicture]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao fazer upload da foto de perfil.' });
   }
 };
@@ -466,35 +495,35 @@ exports.resetPassword = async (req, res) => {
   const normalizedPhone = phone.replace(/\D/g, '');
 
   try {
+    await logInfo('[resetPassword] start', { cpfDigits: normalizedCpf.length, phoneDigits: normalizedPhone.length });
     const user = await User.findOne({ cpf: normalizedCpf });
 
     if (!user) {
-      logWarning(`Password reset attempt for non-existent CPF: ${normalizedCpf}`);
+      await logWarning(`Password reset attempt for non-existent CPF: ${normalizedCpf}`);
       return res.status(401).json({ message: 'Dados de recuperação inválidos.' });
     }
 
-    // Normalize stored phone for comparison just in case
     const storedPhone = user.phone.replace(/\D/g, '');
     
-    // Compare birth dates (ignoring time)
     const providedDate = new Date(birthDate).toISOString().split('T')[0];
     const storedDate = new Date(user.birthDate).toISOString().split('T')[0];
 
     if (normalizedPhone !== storedPhone || providedDate !== storedDate) {
-      logWarning(`Invalid recovery data for CPF: ${normalizedCpf}`);
+      await logWarning(`Invalid recovery data for CPF: ${normalizedCpf}`);
       return res.status(401).json({ message: 'Dados de recuperação não conferem.' });
     }
 
+    await logInfo('[resetPassword] hash new password');
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(newPassword, salt);
 
     user.password = passwordHash;
     await user.save();
 
-    logInfo(`Password reset successfully for CPF: ${normalizedCpf}`);
+    await logInfo(`Password reset successfully for CPF: ${normalizedCpf}`);
     res.status(200).json({ message: 'Senha alterada com sucesso!' });
   } catch (err) {
-    logError('Error resetting password', err);
+    await logError('Error resetting password', { tag: '[resetPassword]', message: err?.message, stack: err?.stack, name: err?.name });
     res.status(500).json({ message: 'Erro ao resetar senha.' });
   }
 };
